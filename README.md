@@ -1,126 +1,261 @@
-# Blackjack FPGA — DE10-Lite
+# Sistema Bancário Concorrente
 
-Projeto desenvolvido em Verilog para implementação do jogo Blackjack (21) utilizando a FPGA DE10-Lite.
+Projeto desenvolvido em C para simulação de problemas clássicos de concorrência utilizando threads POSIX (`pthread`), mutexes e semáforos.
 
-O sistema implementa um jogo entre jogador e banca, utilizando máquina de estados finitos (FSM), displays de 7 segmentos e LEDs da placa.
+O sistema implementa cenários de acesso simultâneo a recursos compartilhados, demonstrando problemas como leitura suja (*dirty read*), condições de corrida (*race conditions*) e inconsistências em buffers compartilhados.
 
 ## Funcionalidades
 
-- Baralho com 52 cartas
-- Sistema de compra de cartas (HIT)
-- Sistema de parada (STAND/STAY)
-- Controle automático da banca
-- Cálculo automático das mãos
-- Tratamento do Ás como 1 ou 11
-- Verificação de vitória, derrota e empate
-- Exibição em displays HEX da DE10-Lite
+- Simulação do problema Leitores × Escritores
+- Simulação do problema Produtores × Consumidores
+- Controle de concorrência com semáforos
+- Controle de concorrência com mutex
+- Demonstração prática de race conditions
+- Demonstração de leitura suja
+- Buffer circular compartilhado
+- Prioridade para escritores
+- Múltiplas threads concorrentes
+- Interface interativa via terminal
 
-## Estrutura do Projeto
+---
 
-### blackjack_top.v
-Módulo principal do sistema.
+# Estrutura do Projeto
 
-Responsável por:
-- Integrar todos os módulos
-- Controlar displays
-- Controlar LEDs
-- Fazer conexão entre FSM, baralho e cálculo das mãos
+### banco_concorrente.c
 
-### blackjack_fsm.v
-Máquina de estados finitos do jogo.
-
-Controla:
-- Distribuição inicial das cartas
-- Turno do jogador
-- Turno da banca
-- Verificação de resultado
-- Finalização da partida
-
-### card_deck.v
-Implementação do baralho.
+Arquivo principal do sistema.
 
 Responsável por:
-- Armazenar as 52 cartas
-- Entregar cartas sem repetição
-- Controle de cartas restantes
+- Exibir menus
+- Criar threads
+- Inicializar semáforos
+- Controlar os módulos de concorrência
+- Executar as simulações
 
-### random_index.v
-Geração de índice pseudoaleatório utilizado na seleção das cartas.
+---
 
-### hand_value.v
-Cálculo do valor das mãos.
+# Leitores × Escritores
 
-Responsável por:
-- Somar cartas
-- Detectar bust (>21)
-- Tratar Ás como 1 ou 11
+Neste módulo, múltiplas threads acessam simultaneamente uma conta bancária compartilhada.
 
-### seven_seg_decoder.v
-Decodificador para displays de 7 segmentos.
+## Conta Compartilhada
 
-Converte valores numéricos em sinais para os displays HEX da DE10-Lite.
+A estrutura da conta contém:
 
-## Displays e LEDs
+- Número da conta
+- Nome do titular
+- Saldo
+- Quantidade de transações
 
-### Displays HEX
+---
 
-| Display | Função |
-|----------|---------|
-| HEX3 HEX2 | Valor da mão do jogador |
-| HEX1 HEX0 | Valor da mão da banca (apenas no final) |
+## Versão 1 — Sem prioridade
 
-### LEDs
+Implementação com sincronização parcial.
 
-| LED | Função |
-|-----|---------|
-| WIN | Vitória |
-| LOSE | Derrota |
-| TIE | Empate |
+Características:
+- Leitores acessam simultaneamente
+- Escritores não possuem exclusão total
+- Pode ocorrer leitura suja
 
-## Controles
+Demonstra:
+- acesso inconsistente ao saldo;
+- leitura de dados durante escrita;
+- falha de sincronização parcial.
 
-| Entrada | Função |
-|----------|---------|
-| KEY0 | Reset |
-| KEY1 | Hit |
-| SW0 | Stand / Stay |
+Exemplo:
 
-## Funcionamento
+```txt
+Leitor 3 leu saldo: R$ 1000.00  *** LEITURA SUJA! ***
+```
 
-1. O jogo inicia após reset.
-2. A banca distribui duas cartas para o jogador e duas para si mesma.
-3. O jogador pode:
-   - Pedir cartas (HIT)
-   - Parar (STAND)
-4. Após o jogador parar, a banca joga automaticamente.
-5. A banca compra cartas até atingir 17 ou mais.
-6. O resultado final é exibido nos LEDs e displays.
+---
 
-## Requisitos
+## Versão 2 — Escritores com prioridade
 
-- Quartus Prime Lite 18.0
-- FPGA DE10-Lite
-- Verilog HDL
+Implementação completa utilizando:
+- semáforos;
+- mutexes;
+- controle de fila;
+- exclusão mútua.
 
-## Compilação
+Características:
+- escritores possuem prioridade;
+- leitores aguardam enquanto escritores acessam a conta;
+- não ocorre leitura suja.
 
-1. Abrir o projeto no Quartus
-2. Adicionar todos os arquivos `.v`
-3. Definir `blackjack_top` como Top-Level Entity
-4. Configurar os pinos no Pin Planner
-5. Compilar o projeto
-6. Gravar na FPGA
+Semáforos utilizados:
 
-## Observações
+```c
+static sem_t v2_mutex_rc;
+static sem_t v2_mutex_wc;
+static sem_t v2_db;
+static sem_t v2_fila;
+```
 
-- Os displays HEX da DE10-Lite utilizam lógica active-low.
-- Os botões KEY também são active-low.
-- O projeto utiliza lógica síncrona baseada na borda de subida do clock.
+---
 
-## Autor
+## Versão 3 — Sem controle de concorrência
+
+Implementação propositalmente sem sincronização.
+
+Características:
+- múltiplos escritores modificam o saldo simultaneamente;
+- não existe exclusão mútua;
+- ocorre race condition.
+
+Demonstra:
+- atualização perdida;
+- sobrescrita de dados;
+- inconsistência do saldo final.
+
+Exemplo:
+
+```txt
+Saldo esperado: R$ 2000.00
+Saldo final:    R$ 1100.00
+```
+
+---
+
+# Produtores × Consumidores
+
+Neste módulo, produtores geram transações bancárias e consumidores processam essas transações através de um buffer circular compartilhado.
+
+---
+
+## Buffer Circular
+
+O buffer armazena:
+- depósitos;
+- saques;
+- transferências.
+
+Estrutura:
+
+```c
+typedef struct {
+    Transacao dados[BUFFER_MAX];
+    int in;
+    int out;
+    int count;
+} BufferCircular;
+```
+
+---
+
+## Controle do Buffer
+
+O sistema utiliza três semáforos principais:
+
+```c
+static sem_t pc_empty;
+static sem_t pc_full;
+static sem_t pc_mutex;
+```
+
+### pc_empty
+Controla posições vazias no buffer.
+
+### pc_full
+Controla posições ocupadas disponíveis para consumo.
+
+### pc_mutex
+Garante exclusão mútua no acesso ao buffer.
+
+---
+
+## Versão 1 — Vários produtores e 1 consumidor
+
+Características:
+- múltiplos produtores inserem transações;
+- apenas um consumidor processa os dados;
+- sincronização completa do buffer.
+
+---
+
+## Versão 2 — Vários produtores e vários consumidores
+
+Características:
+- múltiplas threads produzindo simultaneamente;
+- múltiplas threads consumindo simultaneamente;
+- acesso concorrente totalmente sincronizado.
+
+---
+
+## Versão 3 — Sem controle
+
+Implementação sem sincronização.
+
+Características:
+- produtores escrevem simultaneamente;
+- consumidores acessam posições inválidas;
+- o buffer pode ser corrompido.
+
+Demonstra:
+- race conditions;
+- corrupção de memória lógica;
+- perda de transações.
+
+---
+
+# Funcionamento Geral
+
+O sistema apresenta um menu interativo no terminal:
+
+```txt
+1. Leitores × Escritores
+2. Produtores × Consumidores
+0. Sair
+```
+
+Cada módulo possui diferentes versões para demonstrar comportamentos distintos relacionados à concorrência.
+
+---
+
+# Requisitos
+
+- GCC
+- Linux ou WSL
+- POSIX Threads (`pthread`)
+- Biblioteca de semáforos POSIX
+
+---
+
+# Compilação
+
+Abra o terminal na pasta do projeto e execute:
+
+```bash
+gcc banco_concorrente.c -o banco -lpthread -lm
+```
+
+---
+
+# Execução
+
+Após compilar:
+
+```bash
+./banco
+```
+
+---
+
+# Observações
+
+- O sistema utiliza delays artificiais (`sleep` e `nanosleep`) para aumentar a concorrência entre as threads.
+- Os resultados podem variar a cada execução devido ao escalonamento do sistema operacional.
+- Algumas implementações foram propositalmente desenvolvidas sem sincronização para demonstrar problemas clássicos de concorrência.
+
+---
+
+# Autor
 
 Samy Mallmann
 
-## Referência
+---
 
-Projeto desenvolvido para a disciplina de Eletrônica Digital II — UFAM.
+# Referência
+
+Projeto desenvolvido para a disciplina de Sistemas Operacionais — UFAM.
